@@ -1,0 +1,28 @@
+# Build outputs
+*.exe
+*.pdb
+bin/
+obj/
+
+# Runtime
+*.cfg
+*.log
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / ReSharper
+.idea/
+*.DotSettings.user
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
