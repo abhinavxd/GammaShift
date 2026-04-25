@@ -96,80 +96,6 @@ public struct GammaRamp
 public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
 // ============================================================================
-// Core Audio COM Interfaces (for Game Mute)
-// ============================================================================
-
-[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-class MMDeviceEnumeratorClass { }
-
-[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IMMDeviceEnumerator
-{
-    int EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr devices);
-    int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice device);
-}
-
-[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IMMDevice
-{
-    int Activate([MarshalAs(UnmanagedType.LPStruct)] Guid iid, int clsCtx, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object iface);
-}
-
-[Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IAudioSessionManager2
-{
-    int _QueryInterface();
-    int _AddRef();
-    int GetAudioSessionControl(IntPtr guid, int flags, out IntPtr session);
-    int GetSimpleAudioVolume(IntPtr guid, int flags, out IntPtr vol);
-    int GetSessionEnumerator(out IAudioSessionEnumerator enumerator);
-}
-
-[Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IAudioSessionEnumerator
-{
-    int GetCount(out int count);
-    int GetSession(int index, out IAudioSessionControl session);
-}
-
-[Guid("F4B1A599-7266-4319-A8CA-E70ACB11E8CD"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IAudioSessionControl
-{
-    // We only need QueryInterface to get IAudioSessionControl2
-}
-
-[Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IAudioSessionControl2
-{
-    int _QueryInterface();
-    int _AddRef();
-    int _Release();
-    int GetState(out int state);
-    int GetDisplayName(out IntPtr name);
-    int SetDisplayName(string name, IntPtr context);
-    int GetIconPath(out IntPtr path);
-    int SetIconPath(string path, IntPtr context);
-    int GetGroupingParam(out Guid group);
-    int SetGroupingParam(ref Guid group, IntPtr context);
-    int RegisterAudioSessionNotification(IntPtr client);
-    int UnregisterAudioSessionNotification(IntPtr client);
-    int GetSessionIdentifier(out IntPtr id);
-    int GetSessionInstanceIdentifier(out IntPtr id);
-    int GetProcessId(out uint pid);
-    int IsSystemSoundsSession();
-    int SetDuckingPreference(bool optOut);
-}
-
-[Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface ISimpleAudioVolume
-{
-    int SetMasterVolume(float level, ref Guid context);
-    int GetMasterVolume(out float level);
-    int SetMute(bool mute, ref Guid context);
-    int GetMute(out bool mute);
-}
-
-// ============================================================================
 // Main Application
 // ============================================================================
 
@@ -206,10 +132,6 @@ class GammaShift : ApplicationContext
     bool autoBrightness = false;
     Timer autoBrightnessTimer;
     double lastMeasuredBrightness = -1;
-
-    // Game mute
-    bool gameMuted = false;
-    string[] knownGameProcesses = { "ARC-Win64-Shipping", "arc_raiders" };
 
     // Debug overlay
     Form debugOverlay;
@@ -754,129 +676,16 @@ class GammaShift : ApplicationContext
                 int p = profile; // capture for closure
                 marshalForm.BeginInvoke(new Action(delegate { ApplyProfile(p); }));
             }
-
-            // Numpad 0 = toggle game mute
-            if (vkCode == 0x60) // VK_NUMPAD0
-            {
-                marshalForm.BeginInvoke(new Action(delegate { ToggleGameMute(); }));
-            }
         }
 
         return NativeMethods.CallNextHookEx(hookId, nCode, wParam, lParam);
     }
 
     // ========================================================================
-    // Game Mute (Core Audio)
-    // ========================================================================
-
-    void ToggleGameMute()
-    {
-        gameMuted = !gameMuted;
-
-        int targetPid = -1;
-        string targetName = "";
-
-        // Try known game process names first
-        foreach (string name in knownGameProcesses)
-        {
-            try
-            {
-                Process[] procs = Process.GetProcessesByName(name);
-                if (procs.Length > 0) { targetPid = procs[0].Id; targetName = procs[0].ProcessName; break; }
-            }
-            catch { }
-        }
-
-        // Fallback: mute foreground window process
-        if (targetPid < 0)
-        {
-            IntPtr fg = NativeMethods.GetForegroundWindow();
-            if (fg != IntPtr.Zero)
-            {
-                uint pid;
-                NativeMethods.GetWindowThreadProcessId(fg, out pid);
-                if (pid > 0)
-                {
-                    try { Process p = Process.GetProcessById((int)pid); targetPid = p.Id; targetName = p.ProcessName; }
-                    catch { }
-                }
-            }
-        }
-
-        if (targetPid < 0) return;
-
-        SetProcessMute(targetPid, gameMuted);
-
-        if (notifications)
-        {
-            string msg = gameMuted
-                ? L("Muted: ", "Stumm: ") + targetName
-                : L("Unmuted: ", "Laut: ") + targetName;
-            ShowToast(msg);
-        }
-    }
-
-    static void SetProcessMute(int pid, bool mute)
-    {
-        try
-        {
-            IMMDeviceEnumerator enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorClass();
-            IMMDevice device;
-            enumerator.GetDefaultAudioEndpoint(0 /*eRender*/, 0 /*eConsole*/, out device);
-
-            object objMgr;
-            Guid iidMgr = typeof(IAudioSessionManager2).GUID;
-            device.Activate(iidMgr, 0x17 /*CLSCTX_ALL*/, IntPtr.Zero, out objMgr);
-            IAudioSessionManager2 mgr = (IAudioSessionManager2)objMgr;
-
-            IAudioSessionEnumerator sessions;
-            mgr.GetSessionEnumerator(out sessions);
-
-            int count;
-            sessions.GetCount(out count);
-
-            for (int i = 0; i < count; i++)
-            {
-                IAudioSessionControl ctrl;
-                sessions.GetSession(i, out ctrl);
-
-                IAudioSessionControl2 ctrl2 = ctrl as IAudioSessionControl2;
-                if (ctrl2 == null) continue;
-
-                uint sessionPid;
-                ctrl2.GetProcessId(out sessionPid);
-
-                if ((int)sessionPid == pid)
-                {
-                    Guid volGuid = typeof(ISimpleAudioVolume).GUID;
-                    IntPtr pUnk = Marshal.GetIUnknownForObject(ctrl);
-                    try
-                    {
-                        IntPtr pVol;
-                        Marshal.QueryInterface(pUnk, ref volGuid, out pVol);
-                        if (pVol != IntPtr.Zero)
-                        {
-                            try
-                            {
-                                ISimpleAudioVolume vol = (ISimpleAudioVolume)Marshal.GetObjectForIUnknown(pVol);
-                                Guid ctx = Guid.Empty;
-                                vol.SetMute(mute, ref ctx);
-                                Marshal.ReleaseComObject(vol);
-                            }
-                            finally { Marshal.Release(pVol); }
-                        }
-                    }
-                    finally { Marshal.Release(pUnk); }
-                    break;
-                }
-            }
-        }
-        catch { }
-    }
-
-    // ========================================================================
     // Auto-Brightness
     // ========================================================================
+
+    const double HysteresisMargin = 1.5;
 
     void RunAutoBrightness()
     {
@@ -885,7 +694,18 @@ class GammaShift : ApplicationContext
         double avg = MeasureScreenBrightness();
         lastMeasuredBrightness = avg;
 
-        // Find matching profiles with brightness ranges
+        // Hysteresis: if the current profile still covers avg (with a small
+        // margin), keep it. Stops profile flicker when avg oscillates around a
+        // boundary like 9.9.
+        if (currentProfile >= 1 && currentProfile <= profileCount)
+        {
+            ProfileData cur = profiles[currentProfile - 1];
+            if (cur.BrightnessMin >= 0 && cur.BrightnessMax >= 0
+                && avg >= cur.BrightnessMin - HysteresisMargin
+                && avg <= cur.BrightnessMax + HysteresisMargin)
+                return;
+        }
+
         List<int> rangeProfiles = new List<int>();
         for (int i = 0; i < profileCount; i++)
         {
@@ -934,35 +754,47 @@ class GammaShift : ApplicationContext
 
     static int[][] GetMeasurementZones(int screenW, int screenH)
     {
+        // Corner zones at 1/3 and 2/3 (not 1/4 and 3/4) so they sit inside the
+        // typical HUD margin and sample the actual scene instead of UI elements.
         return new int[][] {
             new int[] { screenW / 2, screenH / 2 },
-            new int[] { screenW / 4, screenH / 4 },
-            new int[] { 3 * screenW / 4, screenH / 4 },
-            new int[] { screenW / 4, 3 * screenH / 4 },
-            new int[] { 3 * screenW / 4, 3 * screenH / 4 },
+            new int[] { screenW / 3, screenH / 3 },
+            new int[] { 2 * screenW / 3, screenH / 3 },
+            new int[] { screenW / 3, 2 * screenH / 3 },
+            new int[] { 2 * screenW / 3, 2 * screenH / 3 },
         };
     }
 
     static readonly double[] zoneWeights = { 2.0, 1.0, 1.0, 1.0, 1.0 };
 
+    Rectangle GetSelectedDisplayBounds()
+    {
+        if (!string.IsNullOrEmpty(selectedDisplay))
+        {
+            foreach (Screen s in Screen.AllScreens)
+                if (s.DeviceName == selectedDisplay) return s.Bounds;
+        }
+        return Screen.PrimaryScreen.Bounds;
+    }
+
     double MeasureScreenBrightness()
     {
-        int screenW = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSCREEN);
-        int screenH = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSCREEN);
+        Rectangle bounds = GetSelectedDisplayBounds();
+        int screenW = bounds.Width;
+        int screenH = bounds.Height;
         int[][] zones = GetMeasurementZones(screenW, screenH);
 
         int sampleSize = 16;
         double totalBrightness = 0;
         double totalWeight = 0;
 
-        // Use Bitmap.GetPixel instead of GDI GetPixel — reads from managed memory, much faster
         using (Bitmap bmp = new Bitmap(sampleSize, sampleSize))
         using (Graphics gBmp = Graphics.FromImage(bmp))
         {
             for (int z = 0; z < zones.Length; z++)
             {
-                int cx = zones[z][0] - sampleSize / 2;
-                int cy = zones[z][1] - sampleSize / 2;
+                int cx = bounds.X + zones[z][0] - sampleSize / 2;
+                int cy = bounds.Y + zones[z][1] - sampleSize / 2;
 
                 gBmp.CopyFromScreen(cx, cy, 0, 0, new Size(sampleSize, sampleSize));
 
@@ -1064,14 +896,15 @@ class GammaShift : ApplicationContext
             return;
         }
 
-        int screenW = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSCREEN);
-        int screenH = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSCREEN);
+        Rectangle bounds = GetSelectedDisplayBounds();
+        int screenW = bounds.Width;
+        int screenH = bounds.Height;
 
         debugOverlay = new Form()
         {
             FormBorderStyle = FormBorderStyle.None,
             StartPosition = FormStartPosition.Manual,
-            Location = new Point(0, 0),
+            Location = new Point(bounds.X, bounds.Y),
             Size = new Size(screenW, screenH),
             TopMost = true,
             ShowInTaskbar = false,
@@ -1285,12 +1118,6 @@ class GammaShift : ApplicationContext
             BuildMenu();
         };
         menu.Items.Add(autoBrItem);
-
-        // Game Mute
-        ToolStripMenuItem muteItem = new ToolStripMenuItem(L("Game Mute", "Spiel Stumm") + "  [Num 0]");
-        muteItem.Checked = gameMuted;
-        muteItem.Click += delegate { ToggleGameMute(); BuildMenu(); };
-        menu.Items.Add(muteItem);
 
         menu.Items.Add(new ToolStripSeparator());
 
