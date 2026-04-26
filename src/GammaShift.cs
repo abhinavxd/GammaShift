@@ -54,6 +54,7 @@ static class NativeMethods
     public const int WS_EX_TRANSPARENT = 0x20;
     public const int WS_EX_TOPMOST = 0x8;
     public const int WS_EX_TOOLWINDOW = 0x80;
+    public const int WS_EX_NOACTIVATE = 0x08000000;
     public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     public const uint SWP_NOMOVE = 0x2;
     public const uint SWP_NOSIZE = 0x1;
@@ -878,7 +879,8 @@ class GammaShift : ApplicationContext
     {
         int exStyle = NativeMethods.GetWindowLong(form.Handle, NativeMethods.GWL_EXSTYLE);
         NativeMethods.SetWindowLong(form.Handle, NativeMethods.GWL_EXSTYLE,
-            exStyle | NativeMethods.WS_EX_LAYERED | NativeMethods.WS_EX_TRANSPARENT | NativeMethods.WS_EX_TOOLWINDOW);
+            exStyle | NativeMethods.WS_EX_LAYERED | NativeMethods.WS_EX_TRANSPARENT
+                    | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
         NativeMethods.SetWindowPos(form.Handle, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
             NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
     }
@@ -917,7 +919,8 @@ class GammaShift : ApplicationContext
         };
         toastForm.Controls.Add(lbl);
 
-        toastForm.Load += delegate { MakeClickThroughOverlay(toastForm); };
+        IntPtr _ = toastForm.Handle;
+        MakeClickThroughOverlay(toastForm);
 
         toastForm.Show();
         toastTimer.Start();
@@ -980,7 +983,8 @@ class GammaShift : ApplicationContext
                 e.Graphics.DrawString(info, f, b, 10, 10);
         };
 
-        debugOverlay.Load += delegate { MakeClickThroughOverlay(debugOverlay); };
+        IntPtr _ = debugOverlay.Handle;
+        MakeClickThroughOverlay(debugOverlay);
 
         overlayRefreshTimer = new Timer();
         overlayRefreshTimer.Interval = 1000;
