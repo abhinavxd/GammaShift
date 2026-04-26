@@ -2,6 +2,10 @@
 
 Display brightness, contrast, and vibrance switcher for Windows. Switch profiles instantly with numpad hotkeys. Works in fullscreen, borderless, and windowed games.
 
+<img width="508" height="551" alt="image" src="https://github.com/user-attachments/assets/280ec567-9c41-4356-9ac4-20bdb7909062" />
+
+
+
 ## How to Use
 
 Run `build.bat` to generate `GammaShift.exe`, then launch it. A tray icon appears. Press **Numpad 1-9** (or **Shift+1-9**) to switch between 9 profiles. Right-click the tray icon for the profile editor.
