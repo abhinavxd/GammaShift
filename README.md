@@ -15,6 +15,17 @@ On first run, a one-time UAC prompt sets a registry key to enable full gamma ran
 - Multi-monitor support
 - Anti-cheat safe: no DLL injection, no memory access, no game hooks
 
+## Auto-Brightness
+
+Set it up once, profiles switch automatically based on how dark the scene is.
+
+1. Enable **Debug Overlay** from the tray. Top-left shows live screen brightness (0-255).
+2. Note the value in a dark scene (cave, bunker) and in a bright one.
+3. Open **Edit Profiles**, set `BrMin/BrMax` per profile to cover those values with no gaps.
+4. Disable Debug Overlay, enable **Auto-Brightness**. Done.
+
+Two configurable delays in the editor: **Brighten delay** (200ms default, fast when scene goes dark) and **Dim delay** (2000ms default, slower when scene gets bright so brief light flashes don't snap back).
+
 ## Why?
 
 I've been playing [ARC Raiders](https://store.steampowered.com/app/1808500/ARC_Raiders/) and some parts of the game are very dark. Every brightness tool I found was a sketchy forum exe, so here we are with a sketchy GitHub exe instead. You're welcome.
