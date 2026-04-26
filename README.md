@@ -1,6 +1,6 @@
 # GammaShift
 
-Display brightness, contrast, and vibrance switcher for Windows. Switch profiles instantly with numpad hotkeys. Works in fullscreen, borderless, and windowed games.
+Display brightness, contrast, and vibrance auto-switcher for Windows. Profiles change based on scene darkness, or instantly with numpad hotkeys. Works in fullscreen, borderless, and windowed games.
 
 <img width="508" height="551" alt="image" src="https://github.com/user-attachments/assets/280ec567-9c41-4356-9ac4-20bdb7909062" />
 
