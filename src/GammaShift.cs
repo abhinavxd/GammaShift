@@ -245,6 +245,7 @@ class GammaShift : ApplicationContext
         SaveOriginalGamma();
         EnsureGammaRegistryKey();
         LoadConfig();
+        if (!File.Exists(configPath)) SaveConfig();
 
         trayIcon = new NotifyIcon()
         {
