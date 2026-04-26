@@ -132,6 +132,13 @@ class GammaShift : ApplicationContext
     bool autoBrightness = false;
     Timer autoBrightnessTimer;
     double lastMeasuredBrightness = -1;
+    int brightenDelayMs = 200;
+    int dimDelayMs = 2000;
+    int pendingProfile = 0;
+    DateTime pendingSince = DateTime.MinValue;
+
+    // Hotkeys
+    bool hotkeysDisabled = false;
 
     // Debug overlay
     Form debugOverlay;
@@ -575,6 +582,9 @@ class GammaShift : ApplicationContext
             lines.Add("AutoStart=" + (autoStart ? "1" : "0"));
             lines.Add("Notifications=" + (notifications ? "1" : "0"));
             lines.Add("ProfileCount=" + profileCount);
+            lines.Add("BrightenDelayMs=" + brightenDelayMs);
+            lines.Add("DimDelayMs=" + dimDelayMs);
+            lines.Add("HotkeysDisabled=" + (hotkeysDisabled ? "1" : "0"));
 
             for (int i = 0; i < 9; i++)
             {
@@ -611,6 +621,9 @@ class GammaShift : ApplicationContext
                 else if (k == "AutoStart") autoStart = v == "1";
                 else if (k == "Notifications") notifications = v == "1";
                 else if (k == "ProfileCount") { int pc; if (int.TryParse(v, out pc) && pc >= 3 && pc <= 9) profileCount = pc; }
+                else if (k == "BrightenDelayMs") { int d; if (int.TryParse(v, out d) && d >= 0 && d <= 30000) brightenDelayMs = d; }
+                else if (k == "DimDelayMs") { int d; if (int.TryParse(v, out d) && d >= 0 && d <= 30000) dimDelayMs = d; }
+                else if (k == "HotkeysDisabled") hotkeysDisabled = v == "1";
                 else if (k.StartsWith("Profile") && k.Contains("_"))
                 {
                     // e.g. Profile1_Gamma=1.5
@@ -658,7 +671,7 @@ class GammaShift : ApplicationContext
 
     IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_KEYDOWN)
+        if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_KEYDOWN && !hotkeysDisabled)
         {
             int vkCode = Marshal.ReadInt32(lParam);
             int profile = 0;
@@ -757,8 +770,37 @@ class GammaShift : ApplicationContext
             bestProfile = rangeProfiles[0] + 1;
         }
 
-        if (bestProfile > 0 && bestProfile != currentProfile)
+        if (bestProfile <= 0 || bestProfile == currentProfile)
+        {
+            pendingProfile = 0;
+            return;
+        }
+
+        // Asymmetric debounce. Direction is determined by comparing the
+        // candidate profile's trigger range to the current profile's: a
+        // lower BrightnessMin means the scene got darker (brighten), a
+        // higher one means it got brighter (dim).
+        int delay = brightenDelayMs;
+        if (currentProfile >= 1 && currentProfile <= profileCount
+            && profiles[currentProfile - 1].BrightnessMin >= 0
+            && profiles[bestProfile - 1].BrightnessMin >= 0)
+        {
+            delay = profiles[bestProfile - 1].BrightnessMin > profiles[currentProfile - 1].BrightnessMin
+                ? dimDelayMs
+                : brightenDelayMs;
+        }
+
+        if (bestProfile != pendingProfile)
+        {
+            pendingProfile = bestProfile;
+            pendingSince = DateTime.UtcNow;
+        }
+
+        if ((DateTime.UtcNow - pendingSince).TotalMilliseconds >= delay)
+        {
             ApplyProfile(bestProfile);
+            pendingProfile = 0;
+        }
     }
 
     static int[][] GetMeasurementZones(int screenW, int screenH)
@@ -974,7 +1016,15 @@ class GammaShift : ApplicationContext
         scrollPanel.Controls.Add(lblCount);
         scrollPanel.Controls.Add(nudCount);
 
-        int yOffset = 50;
+        // Auto-brightness switch delays (asymmetric debounce)
+        Label lblBrighten = new Label() { Text = L("Brighten delay (ms):", "Aufhellverzoegerung (ms):"), Location = new Point(15, 42), AutoSize = true };
+        NumericUpDown nudBrighten = new NumericUpDown() { Minimum = 0, Maximum = 30000, Increment = 100, Value = brightenDelayMs, Location = new Point(180, 39), Width = 70 };
+        Label lblDim = new Label() { Text = L("Dim delay (ms):", "Abdunkelverzoegerung (ms):"), Location = new Point(265, 42), AutoSize = true };
+        NumericUpDown nudDim = new NumericUpDown() { Minimum = 0, Maximum = 30000, Increment = 100, Value = dimDelayMs, Location = new Point(395, 39), Width = 70 };
+        scrollPanel.Controls.Add(lblBrighten); scrollPanel.Controls.Add(nudBrighten);
+        scrollPanel.Controls.Add(lblDim); scrollPanel.Controls.Add(nudDim);
+
+        int yOffset = 78;
         TextBox[] nameBoxes = new TextBox[9];
         NumericUpDown[] gammaBoxes = new NumericUpDown[9];
         NumericUpDown[] contrastBoxes = new NumericUpDown[9];
@@ -1031,6 +1081,8 @@ class GammaShift : ApplicationContext
 
         btnSave.Click += delegate {
             profileCount = (int)nudCount.Value;
+            brightenDelayMs = (int)nudBrighten.Value;
+            dimDelayMs = (int)nudDim.Value;
             for (int i = 0; i < 9; i++)
             {
                 profiles[i].Name = nameBoxes[i].Text;
@@ -1109,7 +1161,7 @@ class GammaShift : ApplicationContext
         {
             int idx = i;
             ProfileData p = profiles[i];
-            string label = L("Profile ", "Profil ") + (i + 1) + " — " + p.Name + (i < 9 ? "  [Num " + (i + 1) + "]" : "");
+            string label = L("Profile ", "Profil ") + (i + 1) + ": " + p.Name + "  [Num " + (i + 1) + " / Shift+" + (i + 1) + "]";
             ToolStripMenuItem item = new ToolStripMenuItem(label);
             if (i + 1 == currentProfile) item.Checked = true;
             item.Click += delegate { ApplyProfile(idx + 1); BuildMenu(); };
@@ -1128,6 +1180,16 @@ class GammaShift : ApplicationContext
             BuildMenu();
         };
         menu.Items.Add(autoBrItem);
+
+        // Disable Hotkeys
+        ToolStripMenuItem disableHotkeysItem = new ToolStripMenuItem(L("Disable Hotkeys", "Hotkeys deaktivieren"));
+        disableHotkeysItem.Checked = hotkeysDisabled;
+        disableHotkeysItem.Click += delegate {
+            hotkeysDisabled = !hotkeysDisabled;
+            SaveConfig();
+            BuildMenu();
+        };
+        menu.Items.Add(disableHotkeysItem);
 
         menu.Items.Add(new ToolStripSeparator());
 
