@@ -262,11 +262,11 @@ class GammaShift : ApplicationContext
         using (ProcessModule mod = cur.MainModule)
             hookId = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, hookProc, NativeMethods.GetModuleHandle(mod.ModuleName), 0);
 
-        // Auto-brightness timer
+        // Brightness sampling timer (drives both auto-brightness and the debug overlay)
         autoBrightnessTimer = new Timer();
         autoBrightnessTimer.Interval = 500;
         autoBrightnessTimer.Tick += delegate { RunAutoBrightness(); };
-        if (autoBrightness) autoBrightnessTimer.Start();
+        UpdateBrightnessSamplingState();
 
         // Toast timer
         toastTimer = new Timer();
@@ -688,12 +688,20 @@ class GammaShift : ApplicationContext
 
     const double HysteresisMargin = 1.5;
 
+    void UpdateBrightnessSamplingState()
+    {
+        if (autoBrightness || debugOverlayVisible) autoBrightnessTimer.Start();
+        else autoBrightnessTimer.Stop();
+    }
+
     void RunAutoBrightness()
     {
-        if (!autoBrightness) return;
+        if (!autoBrightness && !debugOverlayVisible) return;
 
         double avg = MeasureScreenBrightness();
         lastMeasuredBrightness = avg;
+
+        if (!autoBrightness) return;
 
         // Hysteresis: if the current profile still covers avg (with a small
         // margin), keep it. Stops profile flicker when avg oscillates around a
@@ -894,6 +902,7 @@ class GammaShift : ApplicationContext
             if (overlayRefreshTimer != null) { overlayRefreshTimer.Stop(); overlayRefreshTimer.Dispose(); overlayRefreshTimer = null; }
             if (debugOverlay != null) { debugOverlay.Close(); debugOverlay.Dispose(); debugOverlay = null; }
             debugOverlayVisible = false;
+            UpdateBrightnessSamplingState();
             return;
         }
 
@@ -938,6 +947,7 @@ class GammaShift : ApplicationContext
 
         debugOverlay.Show();
         debugOverlayVisible = true;
+        UpdateBrightnessSamplingState();
     }
 
     // ========================================================================
@@ -1059,8 +1069,8 @@ class GammaShift : ApplicationContext
     void ShowCalibrationWizard()
     {
         MessageBox.Show(
-            L("Calibration Wizard\n\n1. Launch your game and enter a bright area\n2. Note the brightness value shown in the tray icon tooltip\n3. Enter a dark area (e.g., a cave)\n4. Note that brightness value too\n5. Open Edit Profiles and set brightness ranges:\n   - Profile 1 (Normal): BrMin=10, BrMax=255\n   - Profile 2 (Bright): BrMin=4, BrMax=9.9\n   - Profile 3 (Brighter): BrMin=0, BrMax=3.9\n\nEnable Auto-Brightness and the profiles will switch automatically!",
-              "Kalibrierungsassistent\n\n1. Starte dein Spiel und gehe in einen hellen Bereich\n2. Notiere den Helligkeitswert im Tray-Icon-Tooltip\n3. Gehe in einen dunklen Bereich (z.B. eine Hoehle)\n4. Notiere auch diesen Helligkeitswert\n5. Oeffne Profile bearbeiten und setze Helligkeitsbereiche:\n   - Profil 1 (Normal): BrMin=10, BrMax=255\n   - Profil 2 (Hell): BrMin=4, BrMax=9.9\n   - Profil 3 (Heller): BrMin=0, BrMax=3.9\n\nAktiviere Auto-Helligkeit und die Profile wechseln automatisch!"),
+            L("Calibration Wizard\n\n1. Enable Debug Overlay from the tray menu\n2. Launch your game and enter a bright area\n3. Note the brightness value shown in the top-left of the overlay\n4. Enter a dark area (e.g., a cave)\n5. Note that brightness value too\n6. Disable Debug Overlay\n7. Open Edit Profiles and set brightness ranges:\n   - Profile 1 (Normal): BrMin=10, BrMax=255\n   - Profile 2 (Bright): BrMin=4, BrMax=9.9\n   - Profile 3 (Brighter): BrMin=0, BrMax=3.9\n\nEnable Auto-Brightness and the profiles will switch automatically!",
+              "Kalibrierungsassistent\n\n1. Aktiviere Debug-Overlay im Tray-Menue\n2. Starte dein Spiel und gehe in einen hellen Bereich\n3. Notiere den Helligkeitswert oben links im Overlay\n4. Gehe in einen dunklen Bereich (z.B. eine Hoehle)\n5. Notiere auch diesen Helligkeitswert\n6. Deaktiviere Debug-Overlay\n7. Oeffne Profile bearbeiten und setze Helligkeitsbereiche:\n   - Profil 1 (Normal): BrMin=10, BrMax=255\n   - Profil 2 (Hell): BrMin=4, BrMax=9.9\n   - Profil 3 (Heller): BrMin=0, BrMax=3.9\n\nAktiviere Auto-Helligkeit und die Profile wechseln automatisch!"),
             "GammaShift - " + L("Calibration", "Kalibrierung"),
             MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
@@ -1113,8 +1123,7 @@ class GammaShift : ApplicationContext
         autoBrItem.Checked = autoBrightness;
         autoBrItem.Click += delegate {
             autoBrightness = !autoBrightness;
-            if (autoBrightness) autoBrightnessTimer.Start();
-            else autoBrightnessTimer.Stop();
+            UpdateBrightnessSamplingState();
             SaveConfig();
             BuildMenu();
         };
