@@ -676,10 +676,11 @@ class GammaShift : ApplicationContext
         {
             int vkCode = Marshal.ReadInt32(lParam);
 
-            // Numpad 0: toggle auto-brightness AND reset to Profile 1. Stays
-            // active even when Disable Hotkeys is on — it's the "back to
-            // normal" panic key, not a gameplay control.
-            if (vkCode == 0x60)
+            // Numpad 0 or Insert: toggle auto-brightness AND reset to Profile 1.
+            // Stays active even when Disable Hotkeys is on, it's the "back to
+            // normal" panic key, not a gameplay control. Insert is the TKL
+            // (10-keyless) alternative since Numpad 0 doesn't exist there.
+            if (vkCode == 0x60 || vkCode == 0x2D)
             {
                 marshalForm.BeginInvoke(new Action(delegate {
                     autoBrightness = !autoBrightness;

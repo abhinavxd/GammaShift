@@ -8,7 +8,7 @@ Display brightness, contrast, and vibrance auto-switcher for Windows. Profiles c
 
 ## How to Use
 
-Run `build.bat` to generate `GammaShift.exe`, then launch it. A tray icon appears. Press **Numpad 1-9** (or **Shift+1-9**) to switch between 9 profiles. **Numpad 0** toggles auto-brightness and resets to Profile 1 (works even when "Disable Hotkeys" is on, so it's safe as a "back to normal" key after a game). Right-click the tray icon for the profile editor.
+Run `build.bat` to generate `GammaShift.exe`, then launch it. A tray icon appears. Press **Numpad 1-9** (or **Shift+1-9**) to switch between 9 profiles. **Numpad 0** (or **Insert** on TKL keyboards) toggles auto-brightness and resets to Profile 1, and stays active even when "Disable Hotkeys" is on so it's safe as a "back to normal" key after a game. Right-click the tray icon for the profile editor.
 
 On first run, a one-time UAC prompt sets a registry key to enable full gamma range. After that, the app runs without admin.
 
