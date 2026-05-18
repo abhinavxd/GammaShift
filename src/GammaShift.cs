@@ -672,24 +672,38 @@ class GammaShift : ApplicationContext
 
     IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_KEYDOWN && !hotkeysDisabled)
+        if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_KEYDOWN)
         {
             int vkCode = Marshal.ReadInt32(lParam);
-            int profile = 0;
 
-            // Numpad 1-9 (both NumLock on and off)
-            if (vkCode >= 0x61 && vkCode <= 0x69) profile = vkCode - 0x60;       // VK_NUMPAD1-9
-            else if (vkCode >= 0x31 && vkCode <= 0x39)                             // VK_1-9 (top row as fallback)
+            // Numpad 0: toggle auto-brightness AND reset to Profile 1. Stays
+            // active even when Disable Hotkeys is on — it's the "back to
+            // normal" panic key, not a gameplay control.
+            if (vkCode == 0x60)
             {
-                // Only use top row if Shift is held (to avoid conflicts with typing)
-                if ((Control.ModifierKeys & Keys.Shift) != 0)
-                    profile = vkCode - 0x30;
+                marshalForm.BeginInvoke(new Action(delegate {
+                    autoBrightness = !autoBrightness;
+                    UpdateBrightnessSamplingState();
+                    ApplyProfile(1);
+                    SaveConfig();
+                    BuildMenu();
+                }));
             }
-
-            if (profile >= 1 && profile <= profileCount)
+            else if (!hotkeysDisabled)
             {
-                int p = profile; // capture for closure
-                marshalForm.BeginInvoke(new Action(delegate { ApplyProfile(p); }));
+                int profile = 0;
+                if (vkCode >= 0x61 && vkCode <= 0x69) profile = vkCode - 0x60;
+                else if (vkCode >= 0x31 && vkCode <= 0x39)
+                {
+                    if ((Control.ModifierKeys & Keys.Shift) != 0)
+                        profile = vkCode - 0x30;
+                }
+
+                if (profile >= 1 && profile <= profileCount)
+                {
+                    int p = profile;
+                    marshalForm.BeginInvoke(new Action(delegate { ApplyProfile(p); }));
+                }
             }
         }
 
