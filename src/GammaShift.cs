@@ -1204,6 +1204,12 @@ class GammaShift : ApplicationContext
             UpdateBrightnessSamplingState();
             SaveConfig();
             BuildMenu();
+            if (notifications)
+            {
+                ShowToast(autoBrightness
+                    ? L("Auto-Brightness: ON", "Auto-Helligkeit: AN")
+                    : L("Auto-Brightness: OFF", "Auto-Helligkeit: AUS"));
+            }
         };
         menu.Items.Add(autoBrItem);
 
