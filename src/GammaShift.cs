@@ -652,7 +652,7 @@ class GammaShift : ApplicationContext
     // Apply Profile
     // ========================================================================
 
-    void ApplyProfile(int profile)
+    void ApplyProfile(int profile, bool showToast = true)
     {
         if (profile < 1 || profile > profileCount) return;
         ProfileData p = profiles[profile - 1];
@@ -662,7 +662,7 @@ class GammaShift : ApplicationContext
 
         trayIcon.Text = "GammaShift - " + L("Profile ", "Profil ") + profile + " (" + p.Name + ")";
 
-        if (notifications)
+        if (showToast && notifications)
             ShowToast(L("Profile ", "Profil ") + profile + " (" + p.Name + ")");
     }
 
@@ -685,9 +685,16 @@ class GammaShift : ApplicationContext
                 marshalForm.BeginInvoke(new Action(delegate {
                     autoBrightness = !autoBrightness;
                     UpdateBrightnessSamplingState();
-                    ApplyProfile(1);
+                    ApplyProfile(1, showToast: false);
                     SaveConfig();
                     BuildMenu();
+                    if (notifications)
+                    {
+                        string status = autoBrightness
+                            ? L("Auto-Brightness: ON", "Auto-Helligkeit: AN")
+                            : L("Auto-Brightness: OFF", "Auto-Helligkeit: AUS");
+                        ShowToast(L("Profile 1 (", "Profil 1 (") + profiles[0].Name + ") | " + status);
+                    }
                 }));
             }
             else if (!hotkeysDisabled)
